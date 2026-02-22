@@ -1,47 +1,50 @@
 FROM python:3.14-trixie
 
-RUN apt-get update && \
-    apt-get install -y git gettext libmariadb-dev libpq-dev locales libmemcached-dev build-essential \
-            supervisor \
-            sudo \
-            locales \
-            --no-install-recommends && \
-    apt-get clean && \
-    rm -rf /var/lib/apt/lists/* && \
-    dpkg-reconfigure locales && \
-    locale-gen C.UTF-8 && \
-    /usr/sbin/update-locale LANG=C.UTF-8 && \
-    mkdir /etc/pretalx && \
-    mkdir /data && \
-    mkdir /public && \
-    groupadd -g 999 pretalxuser && \
-    useradd -r -u 999 -g pretalxuser -d /pretalx -ms /bin/bash pretalxuser && \
-    echo 'pretalxuser ALL=(ALL) NOPASSWD:SETENV: /usr/bin/supervisord' >> /etc/sudoers
-
 ENV LC_ALL=C.UTF-8
 
-COPY --chown=pretalxuser:pretalxuser pretalx/pyproject.toml /pretalx
+RUN set -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends \
+        build-essential \
+        gettext \
+        git \
+        libmariadb-dev \
+        libmemcached-dev \
+        libpq-dev \
+        locales \
+        nodejs \
+        npm \
+        sudo \
+        supervisor \
+    ; \
+    rm -rf /var/lib/apt/lists/*; \
+    dpkg-reconfigure locales; \
+    locale-gen C.UTF-8; \
+    /usr/sbin/update-locale LANG=C.UTF-8; \
+    mkdir -p /etc/pretalx /data /public; \
+    groupadd -g 999 pretalxuser; \
+    useradd -r -u 999 -g pretalxuser -d /pretalx -m -s /bin/bash pretalxuser; \
+    echo 'pretalxuser ALL=(ALL) NOPASSWD:SETENV: /usr/bin/supervisord' >> /etc/sudoers
+
+COPY --chown=pretalxuser:pretalxuser pretalx/pyproject.toml /pretalx/pyproject.toml
 COPY --chown=pretalxuser:pretalxuser pretalx/src /pretalx/src
 COPY --chown=root:root deployment/docker/pretalx.bash /usr/local/bin/pretalx
 COPY --chown=root:root deployment/docker/supervisord.conf /etc/supervisord.conf
 
-RUN pip3 install -U pip setuptools wheel typing && \
-    pip3 install -e /pretalx/[mysql,postgres,redis] && \
-    pip3 install pylibmc && \
-    pip3 install gunicorn
-
-RUN apt-get update && \
-    apt-get install -y nodejs npm && \
-    apt-get clean && \
-    rm -rf /var/lib/apt/lists/*
+RUN set -eux; \
+    python -m pip install -U pip setuptools wheel; \
+    python -m pip install -e /pretalx/[mysql,postgres,redis]; \
+    python -m pip install gunicorn pylibmc; \
+    rm -rf /root/.cache/pip
 
 RUN chmod +x /usr/local/bin/pretalx
 
-RUN python3 -m pretalx makemigrations && \
-    python3 -m pretalx migrate && \
-    python3 -m pretalx rebuild && \
-    rm -f /pretalx/src/pretalx.cfg && \
-    rm -f /pretalx/src/data/.secret && \
+RUN set -eux; \
+    python -m pretalx makemigrations; \
+    python -m pretalx migrate; \
+    python -m pretalx rebuild; \
+    rm -f /pretalx/src/pretalx.cfg; \
+    rm -f /pretalx/src/data/.secret; \
     chown -R pretalxuser:pretalxuser /pretalx /data /public /etc/pretalx
 
 USER pretalxuser
