@@ -1,5 +1,8 @@
 #!/bin/bash
-cd /pretalx/src || exit 1
+set -euo pipefail
+
+cd /pretalx/src
+
 export PRETALX_DATA_DIR="${PRETALX_DATA_DIR:-/data}"
 export HOME=/pretalx
 
@@ -16,42 +19,33 @@ GUNICORN_BIND_ADDR="${GUNICORN_BIND_ADDR:-0.0.0.0:80}"
 AUTOMIGRATE="${AUTOMIGRATE:-yes}"
 AUTOREBUILD="${AUTOREBUILD:-yes}"
 
-if [ "$PRETALX_FILESYSTEM_LOGS" != "/data/logs" ]; then
-    export PRETALX_FILESYSTEM_LOGS
-fi
-if [ "$PRETALX_FILESYSTEM_MEDIA" != "/data/media" ]; then
-    export PRETALX_FILESYSTEM_MEDIA
-fi
-if [ "$PRETALX_FILESYSTEM_STATIC" != "/pretalx/src/static.dist" ]; then
-    export PRETALX_FILESYSTEM_STATIC
+if [ "${PRETALX_FILESYSTEM_LOGS}" != "/data/logs" ]; then export PRETALX_FILESYSTEM_LOGS; fi
+if [ "${PRETALX_FILESYSTEM_MEDIA}" != "/data/media" ]; then export PRETALX_FILESYSTEM_MEDIA; fi
+if [ "${PRETALX_FILESYSTEM_STATIC}" != "/pretalx/src/static.dist" ]; then export PRETALX_FILESYSTEM_STATIC; fi
+
+mkdir -p "${PRETALX_FILESYSTEM_LOGS}"
+mkdir -p "${PRETALX_FILESYSTEM_MEDIA}"
+
+if [ "${PRETALX_FILESYSTEM_STATIC}" != "/pretalx/src/static.dist" ] && \
+   [ ! -d "${PRETALX_FILESYSTEM_STATIC}" ] && \
+   [ "${AUTOREBUILD}" = "yes" ]; then
+    mkdir -p "${PRETALX_FILESYSTEM_STATIC}"
+    flock --nonblock /pretalx/.lockfile python3 -m pretalx rebuild || true
 fi
 
-if [ ! -d "$PRETALX_FILESYSTEM_LOGS" ]; then
-    mkdir "$PRETALX_FILESYSTEM_LOGS";
-fi
-if [ ! -d "$PRETALX_FILESYSTEM_MEDIA" ]; then
-    mkdir "$PRETALX_FILESYSTEM_MEDIA";
-fi
-if [ "$PRETALX_FILESYSTEM_STATIC" != "/pretalx/src/static.dist" ] &&
-   [ ! -d "$PRETALX_FILESYSTEM_STATIC" ] &&
-   [ "$AUTOREBUILD" = "yes" ]; then
-    mkdir -p "$PRETALX_FILESYSTEM_STATIC"
-    flock --nonblock /pretalx/.lockfile python3 -m pretalx rebuild
-fi
-
-if [ "$1" == "cron" ]; then
+if [ "${1:-}" = "cron" ]; then
     exec python3 -m pretalx runperiodic
 fi
 
-if [ "$AUTOMIGRATE" = "yes" ]; then
+if [ "${AUTOMIGRATE}" = "yes" ]; then
     python3 -m pretalx migrate --noinput
 fi
 
-if [ "$1" == "all" ]; then
+if [ "${1:-}" = "all" ]; then
     exec sudo -E /usr/bin/supervisord -n -c /etc/supervisord.conf
 fi
 
-if [ "$1" == "webworker" ]; then
+if [ "${1:-}" = "webworker" ]; then
     exec gunicorn pretalx.wsgi \
         --name pretalx \
         --workers "${GUNICORN_WORKERS}" \
@@ -62,15 +56,15 @@ if [ "$1" == "webworker" ]; then
         --bind="${GUNICORN_BIND_ADDR}"
 fi
 
-if [ "$1" == "taskworker" ]; then
+if [ "${1:-}" = "taskworker" ]; then
     exec celery -A pretalx.celery_app worker -l info
 fi
 
-if [ "$1" == "shell" ]; then
+if [ "${1:-}" = "shell" ]; then
     exec python3 -m pretalx shell
 fi
 
-if [ "$1" == "upgrade" ]; then
+if [ "${1:-}" = "upgrade" ]; then
     python3 -m pretalx rebuild
     exec python3 -m pretalx regenerate_css
 fi
